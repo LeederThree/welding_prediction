@@ -17,7 +17,7 @@ batch_size = 96
 learning_rate = 1e-3
 num_epochs = 100
 
-data_path = 'G:\\resized_img\\20230109LABEL1最精准'
+data_path = 'D:\\resized_img\\20230109LABEL1最精准'
 transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -43,15 +43,15 @@ model = ViT(
     mlp_dim=128,
     dropout=0.1,
     emb_dropout=0.1
-).cuda()
+).to(device)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-criterion = nn.CrossEntropyLoss().cuda()
+criterion = nn.CrossEntropyLoss().to(device)
 
 for epoch in range(num_epochs):
     model.train()
     for images, labels in train_loader:
-        images = images.cuda()
-        labels = labels.cuda()
+        images = images.to(device)
+        labels = labels.to(device)
         optimizer.zero_grad()
         outputs = model(images)
         loss = criterion(outputs, labels)
@@ -64,7 +64,7 @@ for epoch in range(num_epochs):
     total = 0
     with torch.no_grad():
         for inputs, labels in validate_loader:
-            inputs, labels = inputs.cuda(), labels.cuda()
+            inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             val_loss += loss.item()
