@@ -1,12 +1,14 @@
+import time
 import torch
 import torch.optim as optim
 import torchvision.transforms as transforms
-from torch import nn
-from torch.utils.data import DataLoader, random_split
-from make_dataset import WeldData
+from torch.nn import CrossEntropyLoss
+from torch.utils.data import DataLoader, TensorDataset
+from make_dataset import split_dataset
 from vit_pytorch import ViT
 from multiprocessing import cpu_count
-
+import os
+import pickle
 if torch.cuda.is_available():
     device = torch.device("cuda:0")  # you can continue going on here, like cuda:1 cuda:2....etc. 
     # print("Running on the GPU")
@@ -14,26 +16,26 @@ else:
     device = torch.device("cpu")
     # print("Running on the CPU")
 
-batch_size = 96
+batch_size = 2560
 learning_rate = 1e-3
 num_epochs = 100
-num_workers = cpu_count()
+num_workers = 8
 
-data_path = 'D:\\resized_img\\20230109LABEL1最精准'
+data_path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1最精准'
 transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 if __name__ == '__main__':
-    weld_dataset = WeldData(data_path, transform=transform)
-    train_size = int(len(weld_dataset) * 0.6)
-    valid_size = int(len(weld_dataset) * 0.2)
-    test_size = len(weld_dataset) - valid_size -train_size
-    train_dataset, validate_dataset, test_dataset = random_split(weld_dataset, [train_size, valid_size, test_size])
-    print(len(weld_dataset.img_path))
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    validate_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    if not os.path.exists('dataset/train_dataset.pkl'):
+        split_dataset(data_path, transform)
+    with open('dataset/train_dataset.pkl', 'rb') as file:
+        train_dataset = pickle.load(file)
+    with open('dataset/validate_dataset.pkl', 'rb') as file:
+        validate_dataset = pickle.load(file)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+    validate_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    # test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
 
     model = ViT(
         image_size=224,
@@ -47,18 +49,26 @@ if __name__ == '__main__':
         emb_dropout=0.1
     ).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.CrossEntropyLoss().to(device)
+    criterion = CrossEntropyLoss().to(device)
 
     for epoch in range(num_epochs):
         model.train()
+        count = 0
+        iter_start = time.time()
         for images, labels in train_loader:
             images = images.to(device)
             labels = labels.to(device)
+            load_time = time.time()
             optimizer.zero_grad()
             outputs = model(images)
+            refer_time = time.time()
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+            iter_end = time.time()
+            count += 1
+            print(f"iter {count}: load time: {load_time-iter_start}, refer time: {refer_time - load_time}, whole iter: {iter_end - iter_start}")
+            iter_start = iter_end
         
         model.eval()
         val_loss =0.0

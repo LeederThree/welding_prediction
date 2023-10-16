@@ -2,7 +2,7 @@ import os
 import re
 import torchvision.transforms as F
 from PIL import Image
-import torch
+import shutil
 def traversal_files(path):
     paths = os.walk(path)
     pic_path_list = list()
@@ -42,10 +42,17 @@ def resize_pic(path_list):
 
 def voltage_process(voltage_paths):
     for voltage_file in voltage_paths:
-        pass
+        resized_path = re.sub(r"Z:\\SY_DATA", r"C:\\Users\\yimen\\resized_img", voltage_file)
+        save_dir = os.path.dirname(resized_path)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        print(resized_path)
+        shutil.copy(voltage_file, save_dir)
+
+
             
 
-# if __name__ == "__main__":
-#     pic_path_list, voltage_path_list, current_path_list, sound_path_list = traversal_files('G:\\resized_img\\20230109LABEL1最精准')
-#     print(pic_path_list)
-    # resize_pic(pic_path_list)
+if __name__ == "__main__":
+    pic_path_list, voltage_path_list, current_path_list, sound_path_list = traversal_files('Z:\\SY_DATA\\20230109LABEL1最精准')
+    print(current_path_list)
+    voltage_process(current_path_list)
