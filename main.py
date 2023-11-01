@@ -9,6 +9,8 @@ from vit_pytorch import ViT
 from multiprocessing import cpu_count
 import os
 import pickle
+from resnet_layer import resnet18
+
 if torch.cuda.is_available():
     device = torch.device("cuda:0")  # you can continue going on here, like cuda:1 cuda:2....etc. 
     # print("Running on the GPU")
@@ -27,7 +29,7 @@ transform = transforms.Compose([
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 if __name__ == '__main__':
-    if not os.path.exists('dataset/train_dataset.pkl'):
+    if os.path.exists('dataset/train_dataset.pkl'):
         split_dataset(data_path, transform)
     with open('dataset/train_dataset.pkl', 'rb') as file:
         train_dataset = pickle.load(file)
@@ -48,6 +50,7 @@ if __name__ == '__main__':
         dropout=0.1,
         emb_dropout=0.1
     ).to(device)
+    model = resnet18.to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     criterion = CrossEntropyLoss().to(device)
 
@@ -71,7 +74,7 @@ if __name__ == '__main__':
             iter_start = iter_end
         
         model.eval()
-        val_loss =0.0
+        val_loss = 0.0
         correct = 0
         total = 0
         with torch.no_grad():
@@ -85,5 +88,5 @@ if __name__ == '__main__':
                 correct += pred.eq(labels).sum().item()
 
         print(f'Epoch [{epoch+1}/{num_epochs}], '
-            f'Validation Loss: {val_loss/len(validate_loader):.4f}, '
-            f'Validation Accuracy: {100.*correct/total:.2f}%')
+              f'Validation Loss: {val_loss/len(validate_loader):.4f}, '
+              f'Validation Accuracy: {100.*correct/total:.2f}%')

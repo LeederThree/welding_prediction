@@ -3,24 +3,30 @@ import re
 import torchvision.transforms as F
 from PIL import Image
 import shutil
+
+
 def traversal_files(path):
     paths = os.walk(path)
     pic_path_list = list()
     voltage_path_list = list()
     current_path_list = list()
     sound_path_list = list()
+    tensor_path_list = list()
     for path, dir_list, file_list in paths:
         for file_name in file_list:
             file_path = os.path.join(path, file_name)
             if re.search(r".png", file_path):
                 pic_path_list.append(file_path)
+            elif re.search(r".*\.pt", file_path):
+                tensor_path_list.append(file_path)
             elif re.search(r"Voltage", file_path):
                 voltage_path_list.append(file_path)
             elif re.search(r"Current", file_path):
                 current_path_list.append(file_path)
             elif re.search(r"Sound", file_path):
-                sound_path_list.append(file_path)            
-    return pic_path_list, voltage_path_list, current_path_list, sound_path_list
+                sound_path_list.append(file_path)
+
+    return pic_path_list, voltage_path_list, current_path_list, sound_path_list, tensor_path_list
 
 
 def resize_pic(path_list):
@@ -50,9 +56,8 @@ def voltage_process(voltage_paths):
         shutil.copy(voltage_file, save_dir)
 
 
-            
 
 if __name__ == "__main__":
-    pic_path_list, voltage_path_list, current_path_list, sound_path_list = traversal_files('Z:\\SY_DATA\\20230109LABEL1最精准')
+    pic_path_list, voltage_path_list, current_path_list, sound_path_list = traversal_files('C:\\Users\\yimen\\resized_img\\20230109LABEL1最精准')
     print(current_path_list)
-    voltage_process(current_path_list)
+    # voltage_process(current_path_list)
