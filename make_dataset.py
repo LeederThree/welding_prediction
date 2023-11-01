@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset, TensorDataset
 from PIL import Image
+import cv2
 from data_process import traversal_files
 from random import shuffle
 import torch
@@ -20,6 +21,7 @@ label_dict = {
 }
 
 
+# 直接将全部图片转换为Tensor加载到内存中
 def split_dataset(root_dir, transform):
     img_paths = traversal_files(root_dir)[0]
     shuffle(img_paths)
@@ -48,6 +50,7 @@ def split_dataset(root_dir, transform):
     del test_data, test_label, test_dataset
 
 
+# 遍历图片目录
 def traversal_set(paths, length, transform):
     tensor_shape = (length, 3, 224, 224)
     img_tensor = torch.zeros(tensor_shape)
@@ -78,6 +81,7 @@ def traversal_set(paths, length, transform):
     return img_tensor, label_tensor
 
 
+# 将电流电压声音的tensor文件转移到对应目录下
 def move_tensor_file(origin_dir, new_dir):
     paths = os.walk(origin_dir)
     tensor_paths = []
@@ -96,27 +100,28 @@ def move_tensor_file(origin_dir, new_dir):
         print('tensor saved at: ', new_tensor_path)
 
 
+# 将图片数据集和电流电压声音的tensor按标签存放，并根据原来对应的焊道编号重命名
 def img_set_flatten(root_dir):
     img_paths, _, _, _, tensor_paths = traversal_files(root_dir)
     dir_cache = dict()
-    # for img_path in img_paths:
-    #     img_dir = os.path.dirname(img_path)
-    #     dir_list = img_dir.split("\\")[-2:]
-    #     img_file_name = os.path.basename(img_path)
-    #     img_name = os.path.splitext(img_file_name)[0]
-    #     if img_dir not in dir_cache:
-    #         pic_number = get_pic_numbers(img_dir)
-    #         start_num = min(pic_number)
-    #         dir_cache[img_dir] = start_num
-    #     offset = int(img_name) - dir_cache[img_dir]
-    #     dir_list.append(str(offset))
-    #     label = label_dict[img_path.split("\\")[-4]]
-    #     new_dir = f"C:\\Users\\yimen\\resized_img\\flatten_dataset\\images\\{str(label)}\\"
-    #     if not os.path.exists(new_dir):
-    #         os.makedirs(new_dir)
-    #     new_img_path = new_dir + '_'.join(dir_list) + '.png'
-    #     shutil.copy(img_path, new_img_path)
-    #     print(f"img saved at {new_img_path}")
+    for img_path in img_paths:
+        img_dir = os.path.dirname(img_path)
+        dir_list = img_dir.split("\\")[-2:]
+        img_file_name = os.path.basename(img_path)
+        img_name = os.path.splitext(img_file_name)[0]
+        if img_dir not in dir_cache:
+            pic_number = get_pic_numbers(img_dir)
+            start_num = min(pic_number)
+            dir_cache[img_dir] = start_num
+        offset = int(img_name) - dir_cache[img_dir]
+        dir_list.append(str(offset))
+        label = label_dict[img_path.split("\\")[-4]]
+        new_dir = f"C:\\Users\\yimen\\resized_img\\flatten_dataset\\images\\{str(label)}\\"
+        if not os.path.exists(new_dir):
+            os.makedirs(new_dir)
+        new_img_path = new_dir + '_'.join(dir_list) + '.png'
+        shutil.copy(img_path, new_img_path)
+        print(f"img saved at {new_img_path}")
     for tensor_path in tensor_paths:
         label = label_dict[tensor_path.split('\\')[-4]]
         tensor_name = os.path.splitext(os.path.basename(tensor_path))[0]
@@ -130,6 +135,7 @@ def img_set_flatten(root_dir):
         print(f"tensor saved at {new_tensor_path}")
 
 
+# 根据图片数据集切分电压电流声音数据并转为tensor文件
 def split_voltage_current(voltage_paths):
     pic_numbers_map = dict()
     original_number_map = dict()
@@ -162,6 +168,7 @@ def split_voltage_current(voltage_paths):
         save_tensors(voltage_tensor, voltage_file)
 
 
+# 对图片不完整的组别，计算起始图像的偏移，并返回图片编号数组
 def get_pic_numbers(dir):
     dir_files = os.listdir(dir)
     pic_numbers = []
@@ -175,6 +182,7 @@ def get_pic_numbers(dir):
     return pic_numbers
 
 
+# 将转换得到的电压电流声音tensor保存在对应的目录下
 def save_tensors(tensor, tensor_path):
     root_path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1-VoltCurSoundTensors'
     dir_list = tensor_path.split('\\')
@@ -188,6 +196,7 @@ def save_tensors(tensor, tensor_path):
     print(tensor_name)
 
 
+# 自定义的Dataset类别，用来加载数据集
 class WeldData(Dataset):
     def __init__(self, root_dir, transform=None) -> None:
         self.root_dir = root_dir
@@ -197,7 +206,8 @@ class WeldData(Dataset):
 
     def __getitem__(self, index):
         img_item_path = self.img_path[index]
-        img = Image.open(img_item_path).convert('RGB')
+        img = cv2.cvtColor(cv2.imread(img_item_path), cv2.COLOR_BGR2RGB)
+        # img = Image.open(img_item_path).convert('RGB')
         if self.transform:
             img = self.transform(img)
         label = label_dict[img_item_path.split("\\")[-4]]

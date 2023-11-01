@@ -5,6 +5,7 @@ from PIL import Image
 import shutil
 
 
+# 遍历原始数据集，获取各种数据的路径
 def traversal_files(path):
     paths = os.walk(path)
     pic_path_list = list()
@@ -29,6 +30,7 @@ def traversal_files(path):
     return pic_path_list, voltage_path_list, current_path_list, sound_path_list, tensor_path_list
 
 
+# 将图像分辨率转换为224*224并保存
 def resize_pic(path_list):
     for pic_path in path_list:
         source_pic = Image.open(pic_path)
@@ -46,6 +48,7 @@ def resize_pic(path_list):
         resized_pic.save(resized_path)
         
 
+# 将原始数据集下的电压电流声音原始数据转移到resize后的图像目录下
 def voltage_process(voltage_paths):
     for voltage_file in voltage_paths:
         resized_path = re.sub(r"Z:\\SY_DATA", r"C:\\Users\\yimen\\resized_img", voltage_file)
