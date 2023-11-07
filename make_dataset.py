@@ -72,9 +72,12 @@ def traversal_set(paths, length, transform):
         label_tensor[i][0] = label
         label_tensor[i][1] = offset
         if img_dir not in data_path_dict:
-            voltage_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label), 'Voltage' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
-            current_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label), 'Current' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
-            sound_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label), 'Sound' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
+            voltage_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label),
+                                            'Voltage' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
+            current_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label),
+                                            'Current' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
+            sound_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label),
+                                          'Sound' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
             data_path_dict[img_dir] = [voltage_tensor_path, current_tensor_path, sound_tensor_path]
     with open("pic_data_map.json", "w") as json_file:
         json.dump(data_path_dict, json_file)
@@ -95,7 +98,9 @@ def move_tensor_file(origin_dir, new_dir):
         reverse_label_dict[str(value)] = key
     for tensor_path in tensor_paths:
         sub_dir_list = os.path.splitext(os.path.basename(tensor_path))[0].split('-')
-        new_tensor_path = '\\'.join([new_dir, reverse_label_dict[tensor_path.split('\\')[-2]], sub_dir_list[1], sub_dir_list[2], sub_dir_list[0]+'.pt'])
+        new_tensor_path = '\\'.join(
+            [new_dir, reverse_label_dict[tensor_path.split('\\')[-2]], sub_dir_list[1], sub_dir_list[2],
+             sub_dir_list[0] + '.pt'])
         shutil.copy(tensor_path, new_tensor_path)
         print('tensor saved at: ', new_tensor_path)
 
@@ -111,11 +116,12 @@ def img_set_flatten(root_dir):
         img_name = os.path.splitext(img_file_name)[0]
         if img_dir not in dir_cache:
             pic_number = get_pic_numbers(img_dir)
-            start_num = min(pic_number)
-            dir_cache[img_dir] = start_num
-        offset = int(img_name) - dir_cache[img_dir]
-        dir_list.append(str(offset))
+            dir_cache[img_dir] = pic_number
+        index = dir_cache[img_dir].index(int(img_name))
+        dir_list.append(str(index))
         label = label_dict[img_path.split("\\")[-4]]
+        # if label == 4 and index == 8000:
+        #     pass
         new_dir = f"C:\\Users\\yimen\\resized_img\\flatten_dataset\\images\\{str(label)}\\"
         if not os.path.exists(new_dir):
             os.makedirs(new_dir)
@@ -147,39 +153,48 @@ def split_voltage_current(voltage_paths):
         else:
             pic_number = pic_numbers_map[voltage_dir]
         seq_len = len(pic_number)
-        with open(voltage_file, 'r') as file:
-            voltages = file.readlines()
-            voltage_list = [float(line.strip()) for line in voltages]
-        original_dir = voltage_dir.replace('20230109LABEL1最精准', '20230109 - 制备')
+        original_dir = voltage_dir.replace('20230109LABEL1', '20230109 - 制备')
         if original_dir not in original_number_map:
             original_pics = get_pic_numbers(original_dir)
             original_number_map[original_dir] = original_pics
         else:
             original_pics = original_number_map[original_dir]
-        original_len = len(original_pics)
-        offset = min(pic_number) - min(original_pics)
+        original_len = max(original_pics) - min(original_pics) + 1
+        origin = min(original_pics)
+        if origin:
+            pic_number = [num - origin for num in pic_number]
+        with open(voltage_file, 'r') as file:
+            voltages = file.readlines()
+            voltage_list = [float(line.strip()) for line in voltages]
         seg_len = len(voltage_list) // original_len
+        original_tensor = torch.tensor(voltage_list)
+        print(original_tensor.shape)
+        reshaped_tensor = original_tensor[:seg_len * original_len].view(original_len, seg_len)
+        # reshaped_tensor = original_tensor.reshape(original_len, -1)
         voltage_tensor = torch.zeros(seq_len, seg_len)
-        for i in range(seq_len):
-            start = i * seg_len + offset
-            end = (i + 1) * seg_len + offset
-            voltage_tensor[i] = torch.tensor(voltage_list[start:end])
-        print(voltage_tensor.shape)
+        for i in range(len(pic_number)):
+            try:
+                voltage_tensor[i] = reshaped_tensor[pic_number[i]]
+            except IndexError:
+                print(voltage_tensor.shape)
+                print(reshaped_tensor.shape)
+                print(pic_number[i])
+        print(f"{voltage_file}: {voltage_tensor.shape}")
         save_tensors(voltage_tensor, voltage_file)
 
 
-# 对图片不完整的组别，计算起始图像的偏移，并返回图片编号数组
-def get_pic_numbers(dir):
-    dir_files = os.listdir(dir)
+# 遍历目录得到图片的编号列表
+def get_pic_numbers(pic_dir):
+    dir_files = os.listdir(pic_dir)
     pic_numbers = []
     for file in dir_files:
         file_name, file_ext = os.path.splitext(file)
-        if re.search('\(1\)', file_name):
+        if re.search(r'\(1\)', file_name):
             print(file_name)
             continue
         if file_ext == '.png':
             pic_numbers.append(int(file_name))
-    return pic_numbers
+    return sorted(pic_numbers)
 
 
 # 将转换得到的电压电流声音tensor保存在对应的目录下
@@ -200,7 +215,7 @@ def save_tensors(tensor, tensor_path):
 class WeldData(Dataset):
     def __init__(self, root_dir, transform=None) -> None:
         self.root_dir = root_dir
-        self.img_path = traversal_files(root_dir)[0]
+        self.img_path = traversal_files(root_dir + '\\images')[0]
         self.transform = transform
         # print(self.img_path)
 
@@ -210,9 +225,22 @@ class WeldData(Dataset):
         # img = Image.open(img_item_path).convert('RGB')
         if self.transform:
             img = self.transform(img)
-        label = label_dict[img_item_path.split("\\")[-4]]
+        img_name = os.path.basename(img_item_path).rstrip('.png')
+        img_offset = int(img_name[8:])
+        img_index = img_name[:7]
+        label = int(img_item_path.split("\\")[-2])
+        voltage_tensor = torch.load(self.root_dir + f'\\tensors\\Voltage\\{str(label)}\\{img_index}.pt')
+        current_tensor = torch.load(self.root_dir + f'\\tensors\\Current\\{str(label)}\\{img_index}.pt')
+        sound_tensor = torch.load(self.root_dir + f'\\tensors\\Sound\\{str(label)}\\{img_index}.pt')
+        try:
+            voltage = voltage_tensor[img_offset]
+            current = current_tensor[img_offset]
+            sound = sound_tensor[img_offset]
+        except Exception:
+            print(img_offset)
+            print(voltage_tensor.shape)
         # print(label)
-        return img, label
+        return img, voltage, current, sound, label
 
     def __len__(self):
         return len(self.img_path)
@@ -223,11 +251,12 @@ if __name__ == '__main__':
     # train_dataset = WeldData(data_path)
     # train_dataset.__getitem__(0)
     # print(train_dataset.__len__())
-    # path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1最精准'
-    # _, voltage_paths, current_paths, sound_paths = traversal_files(path)
-    # split_voltage_current(voltage_paths)
-    # split_voltage_current(current_paths)
-    # split_voltage_current(sound_paths)
-    origin_path = 'C:\\Users\\yimen\\welding_prediction\\20230109LABEL1-VoltCurSoundTensors'
-    new_path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1最精准'
+    # path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1'
+    # # _, voltage_paths, current_paths, sound_paths, _ = traversal_files(path)
+    # # split_voltage_current(voltage_paths)
+    # # split_voltage_current(current_paths)
+    # # split_voltage_current(sound_paths)
+    # origin_path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1-VoltCurSoundTensors'
+    new_path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1'
     img_set_flatten(new_path)
+    # move_tensor_file(origin_path, new_path)
