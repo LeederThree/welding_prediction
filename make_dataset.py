@@ -1,4 +1,5 @@
 from torch.utils.data import Dataset, TensorDataset
+from torch.nn.functional import interpolate
 from PIL import Image
 import cv2
 from data_process import traversal_files
@@ -211,6 +212,96 @@ def save_tensors(tensor, tensor_path):
     print(tensor_name)
 
 
+def tensor_preprocess(root_path, target_width, process_pic=False):
+    tensor_files = traversal_files(root_path)[-1]
+    for tensor_file in tensor_files:
+        tensor = torch.load(tensor_file)
+        width = tensor.shape[1]
+        if target_width > width >= target_width * 0.8:
+            tensor = tensor_interpolate(tensor, target_width)
+            torch.save(tensor, tensor_file)
+        elif target_width < width <= target_width * 1.2:
+            tensor = tensor[:, :target_width]
+            torch.save(tensor, tensor_file)
+        elif width < target_width * 0.8:
+            if process_pic:
+                remove_pic(tensor_file)
+            os.remove(tensor_file)
+        elif width > target_width * 1.2:
+            if process_pic:
+                tensor_flatten(tensor_file)
+            tensor_index = os.path.basename(tensor_file).rstrip('.pt')
+            target_col = len(list(pic_traversal(get_pic_dir(tensor_file), index=tensor_index)))
+            tensor = tensor.view(-1)[:target_col*target_width].view(target_col, target_width)
+            torch.save(tensor, tensor_file)
+
+
+def tensor_flatten(tensor_path):
+    tensor = torch.load(tensor_path)
+    pic_current = tensor.shape[0]
+    pic_target = tensor.shape[0] * tensor.shape[1] // 75
+    stride = pic_target // pic_current
+    tail = pic_target % pic_current
+    pic_dir = get_pic_dir(tensor_path)
+    tensor_index = os.path.basename(tensor_path).rstrip('.pt')
+    pic_list = list(pic_traversal(pic_dir, index=tensor_index))
+    pic_list = sorted(pic_list, key=lambda x: int(os.path.splitext(x)[0].rsplit('_', 1)[1]))
+    for pic_path in pic_list:
+        iter_stride = stride if tail else stride - 1
+        pic_copy(pic_path, iter_stride)
+        if tail:
+            tail -= 1
+    new_pic_series = list(pic_traversal(pic_dir, index=tensor_index))
+    new_pic_series = sorted(new_pic_series, key=lambda x: tuple(map(int, os.path.splitext(x)[0].rsplit('_', 2)[1:])))
+    for i in range(len(new_pic_series)):
+        base_name = os.path.splitext(new_pic_series[i])[0].rsplit('_', 2)[0]
+        new_name = f'{base_name}_{i}.png'
+        os.rename(new_pic_series[i], new_name)
+
+
+def pic_copy(pic_path, stride):
+    origin_name, _ = os.path.splitext(pic_path)
+    count = stride
+    new_name = f"{origin_name}_0.png"
+    os.rename(pic_path, new_name)
+    for i in range(count):
+        copy_path = f"{origin_name}_{str(i+1)}.png"
+        shutil.copy(new_name, copy_path)
+
+
+def tensor_interpolate(tensor, target_width):
+    origin_tensor = tensor.view(-1)
+    interpolated_tensor = interpolate(origin_tensor.unsqueeze(0).unsqueeze(0), size=tensor.shape[0]*target_width, mode='linear')
+    return interpolated_tensor.view(tensor.shape[0], target_width)
+
+
+def pic_traversal(pic_dir, index=None):
+    for path, _, pic_files in os.walk(pic_dir):
+        for pic_file in pic_files:
+            pic_path = os.path.join(path, pic_file)
+            if index:
+                if re.search(f"{index}", pic_path):
+                    yield pic_path
+            else:
+                yield pic_path
+
+
+def get_pic_dir(tensor_path):
+    dir_list = tensor_path.split('\\')
+    tensor_label = dir_list[-2]
+    base_dir = '\\'.join(dir_list[:-4])
+    pic_dir = f"{base_dir}\\images\\{tensor_label}"
+    return pic_dir
+
+
+def remove_pic(tensor_path):
+    pic_dir = get_pic_dir(tensor_path)
+    tensor_index = os.path.basename(tensor_path).rstrip('.pt')
+    pic_iter = pic_traversal(pic_dir, tensor_index)
+    for pic_path in pic_iter:
+        os.remove(pic_path)
+
+
 # 自定义的Dataset类别，用来加载数据集
 class WeldData(Dataset):
     def __init__(self, root_dir, transform=None) -> None:
@@ -236,7 +327,8 @@ class WeldData(Dataset):
             voltage = voltage_tensor[img_offset]
             current = current_tensor[img_offset]
             sound = sound_tensor[img_offset]
-        except Exception:
+            print(voltage_tensor.shape)
+        except IndexError:
             print(img_offset)
             print(voltage_tensor.shape)
         # print(label)
@@ -251,12 +343,32 @@ if __name__ == '__main__':
     # train_dataset = WeldData(data_path)
     # train_dataset.__getitem__(0)
     # print(train_dataset.__len__())
-    # path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1'
-    # # _, voltage_paths, current_paths, sound_paths, _ = traversal_files(path)
-    # # split_voltage_current(voltage_paths)
-    # # split_voltage_current(current_paths)
-    # # split_voltage_current(sound_paths)
+    path = 'C:\\Users\\yimen\\resized_img\\flatten_dataset\\tensors\\Current'
+    # _, voltage_paths, current_paths, sound_paths, _ = traversal_files(path)
+    # split_voltage_current(voltage_paths)
+    # split_voltage_current(current_paths)
+    # split_voltage_current(sound_paths)
     # origin_path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1-VoltCurSoundTensors'
     new_path = 'C:\\Users\\yimen\\resized_img\\20230109LABEL1'
-    img_set_flatten(new_path)
+    # img_set_flatten(new_path)
     # move_tensor_file(origin_path, new_path)
+    # tensor_files = traversal_files(path)[-1]
+    # tensor_width = dict()
+    # tensor_origin = {'0': 0, '1': 0, '2': 0, '3': 0, '4': 0, '5': 0}
+    # for tensor_file in tensor_files:
+    #     tensor = torch.load(tensor_file)
+    #     label = tensor_file.split('\\')[-2]
+    #     tensor_count = tensor.shape[1]
+    #     tensor_origin[label] += tensor.shape[0]
+    #     if 80 > tensor_count > 60:
+    #         print(tensor_file, tensor.shape[1])
+    #         if label not in tensor_width.keys():
+    #             tensor_width[label] = tensor.shape[0]
+    #         else:
+    #             tensor_width[label] += tensor.shape[0]
+    # print(tensor_width)
+    # print(tensor_origin)
+    root_path = 'C:\\Users\\yimen\\resized_img\\flatten_dateset\\tensors\\'
+    # tensor_preprocess(root_path+'Current', target_width=75, process_pic=True)
+    # tensor_preprocess(root_path+'Voltage', target_width=75, process_pic=False)
+    tensor_preprocess(root_path+'Sound', target_width=750, process_pic=False)

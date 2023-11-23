@@ -89,15 +89,15 @@ if __name__ == '__main__':
         val_loss = 0.0
         correct = 0
         total = 0
-        with torch.no_grad():
-            for inputs, labels in validate_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item()
-                _, pred = outputs.max(1)
-                total += labels.size(0)
-                correct += pred.eq(labels).sum().item()
+        # with torch.no_grad():
+        #     for inputs, labels in validate_loader:
+        #         inputs, labels = inputs.to(device), labels.to(device)
+        #         outputs = model(inputs)
+        #         loss = criterion(outputs, labels)
+        #         val_loss += loss.item()
+        #         _, pred = outputs.max(1)
+        #         total += labels.size(0)
+        #         correct += pred.eq(labels).sum().item()
 
         print(f'Epoch [{epoch+1}/{num_epochs}], '
               f'Validation Loss: {val_loss/len(validate_loader):.4f}, '
