@@ -113,7 +113,6 @@ class ViT(nn.Module):
             nn.Linear(dim, num_classes)
         )
 
-
     def forward(self, img):
         x = self.to_patch_embedding(img)        # b c (h p1) (w p2) -> b (h w) (p1 p2 c) -> b (h w) dim
         b, n, _ = x.shape           # b表示batchSize, n表示每个块的空间分辨率, _表示一个块内有多少个值

@@ -5,11 +5,11 @@ import torchvision.transforms as transforms
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, TensorDataset, random_split
 from make_dataset import split_dataset, WeldData
-from vit_pytorch import ViT
+from fusion_model import Simple1DCNN, ViTModel, FusionModel
 from multiprocessing import cpu_count
 import os
 import pickle
-from resnet_layer import resnet18
+# from resnet_layer import resnet18
 
 if torch.cuda.is_available():
     device = torch.device("cuda:0")  # you can continue going on here, like cuda:1 cuda:2....etc. 
@@ -41,45 +41,35 @@ if __name__ == '__main__':
     test_size = len(weld_dataset) - valid_size - train_size
     train_dataset, validate_dataset, test_dataset = random_split(weld_dataset, [train_size, valid_size, test_size])
     print(len(weld_dataset.img_path))
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
-    validate_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=6)
+    validate_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
     # test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
 
-    model = ViT(
-        image_size=224,
-        patch_size=16,
-        num_classes=6,
-        dim=128,
-        depth=1,
-        heads=1,
-        mlp_dim=128,
-        dropout=0.1,
-        emb_dropout=0.1
-    ).to(device)
-    model = resnet18.to(device)
+    cnn_model = Simple1DCNN(input_size=75, num_channels=12, num_classes=6).to(device)
+    pic_model = ViTModel(image_size=224, num_classes=6).to(device)
+    model = FusionModel(cnn_model, pic_model, num_classes=6).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     criterion = CrossEntropyLoss().to(device)
 
     for epoch in range(num_epochs):
         model.train()
         count = 0
-        iter_start = time.time()
-        for images, voltage, current, sound, labels in train_loader:
+        # iter_start = time.time()
+        for images, concat_tensor, labels in train_loader:
             images = images.to(device)
-            voltage = voltage.to(device)
-            current = current.to(device)
-            sound = sound.to(device)
+            concat_tensor = concat_tensor.to(device)
             labels = labels.to(device)
-            print(f"voltage tensor: {voltage.shape}")
-            print(f"current tensor: {current.shape}")
-            print(f"sound tensor: {sound.shape}")
+            print(f"concat tensor: {concat_tensor.shape}")
+            # print(f"voltage tensor: {voltage.shape}")
+            # print(f"current tensor: {current.shape}")
+            # print(f"sound tensor: {sound.shape}")
             # load_time = time.time()
-            # optimizer.zero_grad()
-            # outputs = model(images)
+            optimizer.zero_grad()
+            outputs = model(concat_tensor, images)
             # refer_time = time.time()
-            # loss = criterion(outputs, labels)
-            # loss.backward()
-            # optimizer.step()
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
             # iter_end = time.time()
             # count += 1
             # print(f"iter {count}: load time: {load_time-iter_start}, refer time: {refer_time - load_time}, whole iter: {iter_end - iter_start}")
@@ -89,15 +79,15 @@ if __name__ == '__main__':
         val_loss = 0.0
         correct = 0
         total = 0
-        # with torch.no_grad():
-        #     for inputs, labels in validate_loader:
-        #         inputs, labels = inputs.to(device), labels.to(device)
-        #         outputs = model(inputs)
-        #         loss = criterion(outputs, labels)
-        #         val_loss += loss.item()
-        #         _, pred = outputs.max(1)
-        #         total += labels.size(0)
-        #         correct += pred.eq(labels).sum().item()
+        with torch.no_grad():
+            for inputs, concat_tensor, labels in validate_loader:
+                inputs, concat_tensor, labels = inputs.to(device), concat_tensor.to(device), labels.to(device)
+                outputs = model(concat_tensor, inputs)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item()
+                _, pred = outputs.max(1)
+                total += labels.size(0)
+                correct += pred.eq(labels).sum().item()
 
         print(f'Epoch [{epoch+1}/{num_epochs}], '
               f'Validation Loss: {val_loss/len(validate_loader):.4f}, '
