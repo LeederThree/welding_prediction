@@ -4,7 +4,10 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, TensorDataset, random_split
-from make_dataset import split_dataset, WeldData
+from tqdm import tqdm
+
+from make_dataset import split_dataset
+from weld_data import WeldData
 from fusion_model import Simple1DCNN, ViTModel, FusionModel
 from multiprocessing import cpu_count
 import os
@@ -29,18 +32,18 @@ transform = transforms.Compose([
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 if __name__ == '__main__':
-    # if os.path.exists('dataset/train_dataset.pkl'):
-    #     split_dataset(data_path, transform)
-    # with open('dataset/train_dataset.pkl', 'rb') as file:
-    #     train_dataset = pickle.load(file)
-    # with open('dataset/validate_dataset.pkl', 'rb') as file:
-    #     validate_dataset = pickle.load(file)
-    weld_dataset = WeldData(data_path, transform=transform)
-    train_size = int(len(weld_dataset) * 0.6)
-    valid_size = int(len(weld_dataset) * 0.2)
-    test_size = len(weld_dataset) - valid_size - train_size
-    train_dataset, validate_dataset, test_dataset = random_split(weld_dataset, [train_size, valid_size, test_size])
-    print(len(weld_dataset.img_path))
+    if not os.path.exists(f'{data_path}\\dataset\\train_dataset.pkl'):
+        split_dataset(data_path, transform)
+    with open(f'{data_path}\\dataset\\train_dataset.pkl', 'rb') as file:
+        train_dataset = pickle.load(file)
+    with open(f'{data_path}\\dataset\\validate_dataset.pkl', 'rb') as file:
+        validate_dataset = pickle.load(file)
+    # weld_dataset = WeldData(data_path, transform=transform)
+    # train_size = int(len(weld_dataset) * 0.6)
+    # valid_size = int(len(weld_dataset) * 0.2)
+    # test_size = len(weld_dataset) - valid_size - train_size
+    # train_dataset, validate_dataset, test_dataset = random_split(weld_dataset, [train_size, valid_size, test_size])
+    # print(len(weld_dataset.img_path))
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=6)
     validate_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
     # test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
@@ -53,13 +56,13 @@ if __name__ == '__main__':
 
     for epoch in range(num_epochs):
         model.train()
-        count = 0
+        count = 1
         # iter_start = time.time()
-        for images, concat_tensor, labels in train_loader:
+        for images, concat_tensor, labels in tqdm(train_loader, desc=f"Training epoch {epoch} in {num_epochs}", leave=False):
             images = images.to(device)
             concat_tensor = concat_tensor.to(device)
             labels = labels.to(device)
-            print(f"concat tensor: {concat_tensor.shape}")
+            # print(f"concat tensor: {concat_tensor.shape}")
             # print(f"voltage tensor: {voltage.shape}")
             # print(f"current tensor: {current.shape}")
             # print(f"sound tensor: {sound.shape}")
@@ -67,7 +70,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             outputs = model(concat_tensor, images)
             # refer_time = time.time()
-            loss = criterion(outputs, labels)
+            loss = criterion(outputs, labels.long())
             loss.backward()
             optimizer.step()
             # iter_end = time.time()
@@ -80,10 +83,10 @@ if __name__ == '__main__':
         correct = 0
         total = 0
         with torch.no_grad():
-            for inputs, concat_tensor, labels in validate_loader:
+            for inputs, concat_tensor, labels in tqdm(validate_loader, desc=f"Validating epoch {epoch} in {num_epochs}", leave=False):
                 inputs, concat_tensor, labels = inputs.to(device), concat_tensor.to(device), labels.to(device)
                 outputs = model(concat_tensor, inputs)
-                loss = criterion(outputs, labels)
+                loss = criterion(outputs, labels.long())
                 val_loss += loss.item()
                 _, pred = outputs.max(1)
                 total += labels.size(0)

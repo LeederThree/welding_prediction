@@ -1,6 +1,5 @@
-from torch.utils.data import Dataset, TensorDataset
+from torch.utils.data import TensorDataset
 from torch.nn.functional import interpolate
-from PIL import Image
 import cv2
 from data_process import traversal_files
 from random import shuffle
@@ -34,55 +33,85 @@ def split_dataset(root_dir, transform):
     valid_paths = img_paths[train_len:train_len + valid_len]
     test_paths = img_paths[train_len + valid_len:]
 
-    train_data, train_label = traversal_set(train_paths, train_len, transform)
-    train_dataset = TensorDataset(train_data, train_label)
-    with open('dataset/train_dataset.pkl', 'wb') as file:
+    train_img_data, train_serial_data, train_label = traversal_set(train_paths, train_len, transform)
+    train_dataset = TensorDataset(train_img_data, train_serial_data, train_label)
+    save_dir = f"{root_dir}\\dataset"
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    with open(f'{save_dir}\\train_dataset.pkl', 'wb') as file:
         pickle.dump(train_dataset, file)
-    del train_data, train_label, train_dataset
-    valid_data, valid_label = traversal_set(valid_paths, valid_len, transform)
-    valid_dataset = TensorDataset(valid_data, valid_label)
-    with open('dataset/validate_dataset.pkl', 'wb') as file:
+    del train_img_data, train_serial_data, train_label, train_dataset
+    valid_img_data, valid_serial_data, valid_label = traversal_set(valid_paths, valid_len, transform)
+    valid_dataset = TensorDataset(valid_img_data, valid_serial_data, valid_label)
+    with open(f'{save_dir}\\validate_dataset.pkl', 'wb') as file:
         pickle.dump(valid_dataset, file)
-    del valid_data, valid_label, valid_dataset
-    test_data, test_label = traversal_set(test_paths, len(test_paths), transform)
-    test_dataset = TensorDataset(test_data, test_label)
-    with open('dataset/test_dataset.pkl', 'wb') as file:
+    del valid_img_data, valid_serial_data, valid_label, valid_dataset
+    test_img_data, test_serial_data, test_label = traversal_set(test_paths, len(test_paths), transform)
+    test_dataset = TensorDataset(test_img_data, test_serial_data, test_label)
+    with open(f'{save_dir}\\test_dataset.pkl', 'wb') as file:
         pickle.dump(test_dataset, file)
-    del test_data, test_label, test_dataset
+    del test_img_data, test_serial_data, test_label, test_dataset
 
 
 # 遍历图片目录
 def traversal_set(paths, length, transform):
-    tensor_shape = (length, 3, 224, 224)
-    img_tensor = torch.zeros(tensor_shape)
-    label_tensor = torch.zeros((length, 2), dtype=torch.int64)
-    dir_start_num = dict()
-    data_path_dict = dict()
+    root_dir = os.path.dirname(paths[0]).rsplit('\\', 2)[0]
+    img_tensor_shape = (length, 3, 224, 224)
+    serial_tensor_shape = (length, 12, 75)
+    img_tensor = torch.zeros(img_tensor_shape)
+    serial_tensor = torch.zeros(serial_tensor_shape)
+    label_tensor = torch.zeros(length)
+    tensor_path_cache = dict()
     for i in tqdm(range(length), desc="Loading Images"):
-        img = Image.open(paths[i]).convert('RGB')
-        img_dir = os.path.dirname(paths[i])
-        img_file_name = os.path.basename(paths[i])
-        img_name = os.path.splitext(img_file_name)[0]
-        if img_dir not in dir_start_num:
-            pic_number = get_pic_numbers(img_dir)
-            start_num = min(pic_number)
-            dir_start_num[img_dir] = start_num
-        offset = int(img_name) - dir_start_num[img_dir]
-        label = label_dict[paths[i].split("\\")[-4]]
-        img_tensor[i] = transform(img)
-        label_tensor[i][0] = label
-        label_tensor[i][1] = offset
-        if img_dir not in data_path_dict:
-            voltage_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label),
-                                            'Voltage' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
-            current_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label),
-                                            'Current' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
-            sound_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label),
-                                          'Sound' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
-            data_path_dict[img_dir] = [voltage_tensor_path, current_tensor_path, sound_tensor_path]
-    with open("pic_data_map.json", "w") as json_file:
-        json.dump(data_path_dict, json_file)
-    return img_tensor, label_tensor
+        img_item_path = paths[i]
+        img = cv2.cvtColor(cv2.imread(img_item_path), cv2.COLOR_BGR2RGB)
+        if transform:
+            img = transform(img)
+        img_name = os.path.basename(img_item_path).rstrip('.png')
+        img_index, img_offset = img_name.rsplit('_', 1)
+        img_offset = int(img_offset)
+        label = int(img_item_path.split("\\")[-2])
+        if img_index not in tensor_path_cache.keys():
+            voltage_tensor = torch.load(root_dir + f'\\tensors\\Voltage\\{str(label)}\\{img_index}.pt')
+            current_tensor = torch.load(root_dir + f'\\tensors\\Current\\{str(label)}\\{img_index}.pt')
+            sound_tensor = torch.load(root_dir + f'\\tensors\\Sound\\{str(label)}\\{img_index}.pt')
+            tensor_path_cache[img_index] = [voltage_tensor, current_tensor, sound_tensor]
+        else:
+            voltage_tensor = tensor_path_cache[img_index][0]
+            current_tensor = tensor_path_cache[img_index][1]
+            sound_tensor = tensor_path_cache[img_index][2]
+        voltage = voltage_tensor[img_offset]
+        current = current_tensor[img_offset]
+        sound = sound_tensor[img_offset]
+        sound = sound.view(voltage_tensor.shape[1], -1)
+        concat_tensor = torch.zeros(voltage.shape[0], 12)
+        concat_tensor[:, 0] = voltage
+        concat_tensor[:, 1] = current
+        concat_tensor[:, 2:] = sound
+        img_tensor[i] = img
+        serial_tensor[i] = concat_tensor.T
+        label_tensor[i] = label
+        # img_dir = os.path.dirname(paths[i])
+        # img_file_name = os.path.basename(paths[i])
+        # img_name = os.path.splitext(img_file_name)[0]
+        # if img_dir not in dir_start_num:
+        #     pic_number = get_pic_numbers(img_dir)
+        #     start_num = min(pic_number)
+        #     dir_start_num[img_dir] = start_num
+        # offset = int(img_name) - dir_start_num[img_dir]
+        # label = label_dict[paths[i].split("\\")[-4]]
+        # img_tensor[i] = transform(img)
+        # label_tensor[i][0] = label
+        # label_tensor[i][1] = offset
+        # if img_dir not in data_path_dict:
+        #     voltage_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label),
+        #                                     'Voltage' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
+        #     current_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label),
+        #                                     'Current' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
+        #     sound_tensor_path = '/'.join(['20230109LABEL1-VoltCurSoundTensors', str(label),
+        #                                   'Sound' + '-' + '-'.join(paths[i].split("\\")[-3:-1]) + '.pt'])
+        #     data_path_dict[img_dir] = [voltage_tensor_path, current_tensor_path, sound_tensor_path]
+    return img_tensor, serial_tensor, label_tensor
 
 
 # 将电流电压声音的tensor文件转移到对应目录下
@@ -302,55 +331,6 @@ def remove_pic(tensor_path):
         os.remove(pic_path)
 
 
-# 自定义的Dataset类别，用来加载数据集
-class WeldData(Dataset):
-    def __init__(self, root_dir, transform=None) -> None:
-        self.root_dir = root_dir
-        self.img_path = traversal_files(root_dir + '\\images')[0]
-        self.transform = transform
-        self.cache = dict()
-        # print(self.img_path)
-
-    def __getitem__(self, index):
-        img_item_path = self.img_path[index]
-        img = cv2.cvtColor(cv2.imread(img_item_path), cv2.COLOR_BGR2RGB)
-        # img = Image.open(img_item_path).convert('RGB')
-        if self.transform:
-            img = self.transform(img)
-        img_name = os.path.basename(img_item_path).rstrip('.png')
-        img_index, img_offset = img_name.rsplit('_', 1)
-        img_offset = int(img_offset)
-        label = int(img_item_path.split("\\")[-2])
-        if img_index not in self.cache.keys():
-            voltage_tensor = torch.load(self.root_dir + f'\\tensors\\Voltage\\{str(label)}\\{img_index}.pt')
-            current_tensor = torch.load(self.root_dir + f'\\tensors\\Current\\{str(label)}\\{img_index}.pt')
-            sound_tensor = torch.load(self.root_dir + f'\\tensors\\Sound\\{str(label)}\\{img_index}.pt')
-            self.cache[img_index] = [voltage_tensor, current_tensor, sound_tensor]
-        else:
-            voltage_tensor = self.cache[img_index][0]
-            current_tensor = self.cache[img_index][1]
-            sound_tensor = self.cache[img_index][2]
-        try:
-            voltage = voltage_tensor[img_offset]
-            current = current_tensor[img_offset]
-            sound = sound_tensor[img_offset]
-            sound = sound.view(voltage_tensor.shape[1], -1)
-            concat_tensor = torch.zeros(voltage.shape[0], 12)
-            concat_tensor[:, 0] = voltage
-            concat_tensor[:, 1] = current
-            concat_tensor[:, 2:] = sound
-            # print(voltage_tensor.shape)
-        except IndexError:
-            print(img_offset)
-            print(voltage_tensor.shape)
-            return None
-        # print(label)
-        return img, concat_tensor.T, label
-
-    def __len__(self):
-        return len(self.img_path)
-
-
 if __name__ == '__main__':
     # data_path = 'G:\\resized_img\\20230109LABEL1最精准'
     # train_dataset = WeldData(data_path)
@@ -381,7 +361,7 @@ if __name__ == '__main__':
     #             tensor_width[label] += tensor.shape[0]
     # print(tensor_width)
     # print(tensor_origin)
-    root_path = 'C:\\Users\\yimen\\resized_img\\flatten_dateset\\tensors\\'
+    root_path = 'C:\\Users\\yimen\\resized_img\\flatten_dataset\\tensors\\'
     # tensor_preprocess(root_path+'Current', target_width=75, process_pic=True)
     # tensor_preprocess(root_path+'Voltage', target_width=75, process_pic=False)
     # tensor_preprocess(root_path+'Sound', target_width=750, process_pic=False)
