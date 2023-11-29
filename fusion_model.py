@@ -49,6 +49,90 @@ class Simple1DCNN(nn.Module):
         return x
 
 
+class VGG19(torch.nn.Module):
+    def __init__(self, in_channel=1, classes=5):
+        super(VGG19, self).__init__()
+        self.feature = torch.nn.Sequential(
+
+            torch.nn.Conv1d(in_channel, 64, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(64),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(64, 64, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(64),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool1d(2),
+
+            torch.nn.Conv1d(64, 128, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(128),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(128, 128, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(128),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool1d(2),
+
+            torch.nn.Conv1d(128, 256, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(256),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(256, 256, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(256),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(256, 256, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(256),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(256, 256, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(256),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool1d(2),
+
+            torch.nn.Conv1d(256, 512, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(512),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(512, 512, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(512),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(512, 512, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(512),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(512, 512, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(512),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool1d(2),
+
+            torch.nn.Conv1d(512, 512, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(512),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(512, 512, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(512),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(512, 512, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(512),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(512, 512, kernel_size=3, padding=1),
+            torch.nn.BatchNorm1d(512),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool1d(2),
+
+            torch.nn.AdaptiveAvgPool1d(7)
+        )
+        self.classifier = torch.nn.Sequential(
+            torch.nn.Linear(3584,1024),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.5),
+            torch.nn.Linear(1024,1024),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.5),
+            torch.nn.Linear(1024, 512),
+            torch.nn.ReLU(),
+            torch.nn.Linear(512, classes),
+        )
+
+    def forward(self, x):
+        x = self.feature(x)
+        x = x.view(-1, 3584)
+        x = self.classifier(x)
+        return x
+
+
 class ViTModel(nn.Module):
     def __init__(self, image_size, num_classes):
         super(ViTModel, self).__init__()
@@ -57,8 +141,8 @@ class ViTModel(nn.Module):
             patch_size=16,
             num_classes=num_classes,
             dim=128,
-            depth=1,
-            heads=1,
+            depth=6,
+            heads=12,
             mlp_dim=128,
             dropout=0.1,
             emb_dropout=0.1

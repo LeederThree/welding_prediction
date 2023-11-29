@@ -1,37 +1,38 @@
-import time
+# import time
 import torch
 import torch.optim as optim
 import torchvision.transforms as transforms
 from torch.nn import CrossEntropyLoss
-from torch.utils.data import DataLoader, TensorDataset, random_split
+from torch.utils.data import DataLoader
 from tqdm import tqdm
-
 from make_dataset import split_dataset
-from weld_data import WeldData
-from fusion_model import Simple1DCNN, ViTModel, FusionModel
-from multiprocessing import cpu_count
+# from weld_data import WeldData
+from fusion_model import Simple1DCNN, ViTModel, FusionModel, VGG19
+# from multiprocessing import cpu_count
 import os
 import pickle
 # from resnet_layer import resnet18
 
-if torch.cuda.is_available():
-    device = torch.device("cuda:0")  # you can continue going on here, like cuda:1 cuda:2....etc. 
-    # print("Running on the GPU")
-else:
-    device = torch.device("cpu")
-    # print("Running on the CPU")
 
-batch_size = 2560
-learning_rate = 1e-3
-num_epochs = 100
-num_workers = 8
-
-data_path = 'C:\\Users\\yimen\\resized_img\\flatten_dataset'
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
 if __name__ == '__main__':
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")  # you can continue going on here, like cuda:1 cuda:2....etc.
+        # print("Running on the GPU")
+    else:
+        device = torch.device("cpu")
+        # print("Running on the CPU")
+
+    batch_size = 16
+    learning_rate = 1e-3
+    num_epochs = 100
+    num_workers = 8
+
+    data_path = 'C:\\Users\\yimen\\resized_img\\flatten_dataset'
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
+
     if not os.path.exists(f'{data_path}\\dataset\\train_dataset.pkl'):
         split_dataset(data_path, transform)
     with open(f'{data_path}\\dataset\\train_dataset.pkl', 'rb') as file:
@@ -44,11 +45,12 @@ if __name__ == '__main__':
     # test_size = len(weld_dataset) - valid_size - train_size
     # train_dataset, validate_dataset, test_dataset = random_split(weld_dataset, [train_size, valid_size, test_size])
     # print(len(weld_dataset.img_path))
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=6)
-    validate_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+    validate_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=True, num_workers=6)
     # test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
 
-    cnn_model = Simple1DCNN(input_size=75, num_channels=12, num_classes=6).to(device)
+    cnn_model = VGG19(in_channel=12, classes=6).to(device)
+    # cnn_model = Simple1DCNN(input_size=75, num_channels=12, num_classes=6).to(device)
     pic_model = ViTModel(image_size=224, num_classes=6).to(device)
     model = FusionModel(cnn_model, pic_model, num_classes=6).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
