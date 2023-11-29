@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from vit_pytorch import ViT
+from torchvision.models import vit_b_16, ViT_B_16_Weights
 
 
 class Simple1DCNN(nn.Module):
@@ -150,6 +151,23 @@ class ViTModel(nn.Module):
 
     def forward(self, x):
         x_vit = self.vit_model(x)
+        return x_vit
+
+
+class ViTB16Model(nn.Module):
+    def __init__(self, image_size, num_classes):
+        super(ViTB16Model, self).__init__()
+        self.vit_b_16_model = vit_b_16(
+            weights=ViT_B_16_Weights.IMAGENET1K_V1
+        )
+        # self.vit_b_16_model.num_classes = num_classes
+        # print(self.vit_b_16_model.heads[0])
+        self.vit_b_16_model.heads[0] = nn.Linear(self.vit_b_16_model.heads[0].in_features, num_classes)
+        # print(self.vit_b_16_model.heads)
+
+    def forward(self, x):
+        # print(self.vit_b_16_model.heads[0])
+        x_vit = self.vit_b_16_model(x)
         return x_vit
 
 
