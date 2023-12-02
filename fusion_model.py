@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from vit_pytorch import ViT
-from torchvision.models import vit_b_16, ViT_B_16_Weights
-
+from torchvision.models import vit_b_16, ViT_B_16_Weights, resnet18, ResNet18_Weights
+from torchsummary import summary
 
 class Simple1DCNN(nn.Module):
     def __init__(self, input_size, num_channels, num_classes):
@@ -141,10 +141,10 @@ class ViTModel(nn.Module):
             image_size=image_size,
             patch_size=16,
             num_classes=num_classes,
-            dim=128,
-            depth=6,
+            dim=768,
+            depth=12,
             heads=12,
-            mlp_dim=128,
+            mlp_dim=3072,
             dropout=0.1,
             emb_dropout=0.1
         )
@@ -155,7 +155,7 @@ class ViTModel(nn.Module):
 
 
 class ViTB16Model(nn.Module):
-    def __init__(self, image_size, num_classes):
+    def __init__(self, num_classes):
         super(ViTB16Model, self).__init__()
         self.vit_b_16_model = vit_b_16(
             weights=ViT_B_16_Weights.IMAGENET1K_V1
@@ -168,7 +168,16 @@ class ViTB16Model(nn.Module):
     def forward(self, x):
         # print(self.vit_b_16_model.heads[0])
         x_vit = self.vit_b_16_model(x)
+        # print(x_vit.shape)
         return x_vit
+
+
+class ResNet18Model(nn.Module):
+    def __init__(self, in_channels, num_classes):
+        super(ResNet18Model, self).__init__()
+        self.mobilenet_v3 = resnet18(
+            weights=ResNet18_Weights.IMAGENET1K_V1
+        )
 
 
 class FusionModel(nn.Module):
@@ -187,3 +196,11 @@ class FusionModel(nn.Module):
         x_combined = self.fc_fusion(x_combined)
 
         return x_combined
+
+
+if __name__ == '__main__':
+    device = torch.device("cuda:0")
+    vgg_model = VGG19(in_channel=12, classes=6).to(device)
+    vit_model = ViTB16Model(num_classes=6).to(device)
+    fusion_model = FusionModel(vgg_model, vit_model, num_classes=6).to(device)
+    summary(model=vit_model, input_size=(3, 224, 224))

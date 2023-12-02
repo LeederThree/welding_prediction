@@ -3,10 +3,10 @@ import torch
 import torch.optim as optim
 import torchvision.transforms as transforms
 from torch.nn import CrossEntropyLoss
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 from make_dataset import split_dataset
-# from weld_data import WeldData
+from weld_data import WeldData
 from fusion_model import Simple1DCNN, ViTModel, FusionModel, VGG19, ViTB16Model
 # from multiprocessing import cpu_count
 import os
@@ -15,13 +15,15 @@ import pickle
 
 
 if __name__ == '__main__':
-    if torch.cuda.is_available():
-        device = torch.device("cuda:0")  # you can continue going on here, like cuda:1 cuda:2....etc.
-        # print("Running on the GPU")
-    else:
-        device = torch.device("cpu")
-        # print("Running on the CPU")
-
+    # if torch.cuda.is_available():
+    #     # device = torch.device("cuda:1")  # you can continue going on here, like cuda:1 cuda:2....etc.
+    #     torch.cuda.set_device(1)
+    #     # print("Running on the GPU")
+    # else:
+    #     device = torch.device("cpu")
+    #     # print("Running on the CPU")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Current CUDA device:", torch.cuda.current_device())
     batch_size = 16
     learning_rate = 1e-3
     num_epochs = 100
@@ -34,20 +36,20 @@ if __name__ == '__main__':
         os.makedirs(model_path)
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    if not os.path.exists(f'{data_path}\\dataset\\train_dataset.pkl'):
-        split_dataset(data_path, transform)
-    with open(f'{data_path}\\dataset\\train_dataset.pkl', 'rb') as file:
-        train_dataset = pickle.load(file)
-    with open(f'{data_path}\\dataset\\validate_dataset.pkl', 'rb') as file:
-        validate_dataset = pickle.load(file)
-    # weld_dataset = WeldData(data_path, transform=transform)
-    # train_size = int(len(weld_dataset) * 0.6)
-    # valid_size = int(len(weld_dataset) * 0.2)
-    # test_size = len(weld_dataset) - valid_size - train_size
-    # train_dataset, validate_dataset, test_dataset = random_split(weld_dataset, [train_size, valid_size, test_size])
+    # if not os.path.exists(f'{data_path}\\dataset\\train_dataset.pkl'):
+    #     split_dataset(data_path, transform)
+    # with open(f'{data_path}\\dataset\\train_dataset.pkl', 'rb') as file:
+    #     train_dataset = pickle.load(file)
+    # with open(f'{data_path}\\dataset\\validate_dataset.pkl', 'rb') as file:
+    #     validate_dataset = pickle.load(file)
+    weld_dataset = WeldData(data_path, transform=transform)
+    train_size = int(len(weld_dataset) * 0.6)
+    valid_size = int(len(weld_dataset) * 0.2)
+    test_size = len(weld_dataset) - valid_size - train_size
+    train_dataset, validate_dataset, test_dataset = random_split(weld_dataset, [train_size, valid_size, test_size])
     # print(len(weld_dataset.img_path))
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=16)
     validate_loader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
@@ -56,9 +58,11 @@ if __name__ == '__main__':
     cnn_model = VGG19(in_channel=12, classes=6).to(device)
     # cnn_model = Simple1DCNN(input_size=75, num_channels=12, num_classes=6).to(device)
     # pic_model = ViTModel(image_size=224, num_classes=6).to(device)
-    pic_model = ViTB16Model(image_size=224, num_classes=6).to(device)
+    pic_model = ViTB16Model(num_classes=6).to(device)
     # print(pic_model)
     model = FusionModel(cnn_model, pic_model, num_classes=6).to(device)
+    if os.path.exists(model_path):
+        model.load_state_dict(torch.load(f'{model_path}/vit_vgg_fusion_30.pth'))
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     criterion = CrossEntropyLoss().to(device)
 
