@@ -181,12 +181,12 @@ class ResNet18Model(nn.Module):
 
 
 class FusionModel(nn.Module):
-    def __init__(self, cnn_model, vit_model, num_classes):
+    def __init__(self, cnn_model, vit_model, features, num_classes):
         super(FusionModel, self).__init__()
         self.cnn_model = cnn_model
         self.vit_model = vit_model
-
-        self.fc_fusion = nn.Linear(num_classes * 2, num_classes)
+        self.input_features = features
+        self.fc_fusion = nn.Linear(self.input_features, num_classes)
 
     def forward(self, x_cnn, x_vit):
         x_cnn = self.cnn_model(x_cnn)
@@ -201,6 +201,6 @@ class FusionModel(nn.Module):
 if __name__ == '__main__':
     device = torch.device("cuda:0")
     vgg_model = VGG19(in_channel=12, classes=6).to(device)
-    vit_model = ViTB16Model(num_classes=6).to(device)
+    vit_model = ViTModel(image_size=224, num_classes=6).to(device)
     fusion_model = FusionModel(vgg_model, vit_model, num_classes=6).to(device)
     summary(model=vit_model, input_size=(3, 224, 224))
